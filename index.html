@@ -1,247 +1,294 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WLED 4-Relay HTTP Control</title>
-
+<title>Custom WLED Pro Dashboard</title>
 <style>
-:root {
-  --bg: #0b1120;
-  --card: #111827;
-  --input: #0f172a;
-  --border: #1f2937;
-  --accent: #6366f1;
-  --accent-hover: #4f46e5;
-  --on: #22c55e;
-  --off: #ef4444;
-  --warn: #f59e0b;
-  --text: #e5e7eb;
-  --muted: #9ca3af;
-}
-
-body {
-  margin: 0;
-  font-family: Arial, sans-serif;
-  background: linear-gradient(135deg, #0b1120, #020617);
-  color: var(--text);
-  display: flex;
-  justify-content: center;
-  padding: 50px 20px;
-}
-
-.container {
-  width: 100%;
-  max-width: 520px;
-  background: var(--card);
-  padding: 30px;
-  border-radius: 14px;
-  box-shadow: 0 0 50px rgba(0,0,0,0.6);
-}
-
-h1 {
-  text-align: center;
-  margin-top: 0;
-}
-
-.status-bar {
-  text-align: center;
-  padding: 8px;
-  border-radius: 6px;
-  margin-bottom: 20px;
-  font-weight: bold;
-}
-
-.connected { background: rgba(34,197,94,0.2); color: var(--on); }
-.disconnected { background: rgba(239,68,68,0.2); color: var(--off); }
-.connecting { background: rgba(245,158,11,0.2); color: var(--warn); }
-
-label {
-  font-size: 14px;
-  color: var(--muted);
-}
-
-input {
-  width: 100%;
-  padding: 12px;
-  margin: 8px 0 20px 0;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--input);
-  color: white;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 15px;
-}
-
-.relay {
-  background: var(--input);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 15px;
-  text-align: center;
-}
-
-.indicator {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  margin: 0 auto 10px auto;
-  background: var(--off);
-  box-shadow: 0 0 5px var(--off);
-  transition: 0.3s;
-}
-
-.indicator.on {
-  background: var(--on);
-  box-shadow: 0 0 10px var(--on);
-}
-
-button {
-  width: 100%;
-  padding: 8px;
-  border-radius: 6px;
-  border: none;
-  background: var(--accent);
-  color: white;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-button:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
+body { font-family: Arial; background:#111; color:#eee; margin:0; }
+header { background:#1e1e1e; padding:10px; display:flex; justify-content:space-between; align-items:center; }
+button { padding:8px 12px; margin:4px; cursor:pointer; border:none; border-radius:4px; }
+input, select { width:100%; padding:6px; margin:6px 0; }
+.tab { display:none; padding:15px; }
+.tab-buttons { display:flex; background:#222; }
+.tab-buttons button { flex:1; background:#222; color:#aaa; }
+.tab-buttons button.active { background:#333; color:#fff; }
+.section { margin-bottom:15px; background:#1c1c1c; padding:10px; border-radius:6px; }
+.section h3 { margin:0 0 8px 0; cursor:pointer; }
+.hidden { display:none; }
+.slider { width:100%; }
+.relay-btn { width:100px; }
+.status { font-size:12px; }
+canvas { width:100%; border-radius:4px; }
 </style>
 </head>
 <body>
 
-<div class="container">
-  <h1>🌙 WLED Relay Control</h1>
+<header>
+  <div>
+    IP: <input id="ipInput" placeholder="192.168.1.10" style="width:140px;">
+    <button onclick="connect()">Connect</button>
+  </div>
+  <div class="status" id="status">Disconnected</div>
+</header>
 
-  <div id="connectionStatus" class="status-bar disconnected">
-    Not Connected
+<div class="tab-buttons">
+  <button onclick="openTab('lights')" class="active">Lights</button>
+  <button onclick="openTab('relays')">Relays</button>
+  <button onclick="openTab('audio')">Audio</button>
+  <button onclick="openTab('system')">System</button>
+</div>
+
+<!-- LIGHTS TAB -->
+<div id="lights" class="tab" style="display:block;">
+
+  <div class="section">
+    <h3 onclick="toggleSection(this)">Main Control</h3>
+    <div>
+      <button onclick="togglePower()">Power</button>
+      Brightness
+      <input type="range" min="0" max="255" id="briSlider"
+        oninput="updateBrightness(this.value)">
+    </div>
   </div>
 
-  <label>WLED IP Address</label>
-  <input type="text" id="ip" placeholder="192.168.1.10">
+  <div class="section">
+    <h3 onclick="toggleSection(this)">Effects</h3>
+    <div>
+      Effect
+      <select id="effectSelect" onchange="changeEffect(this.value)"></select>
 
-  <div class="grid">
-    <div class="relay">
-      <h3>Relay 0</h3>
-      <div id="led0" class="indicator"></div>
-      <button onclick="toggleRelay(0)">Toggle</button>
-    </div>
+      Palette
+      <select id="paletteSelect" onchange="changePalette(this.value)"></select>
 
-    <div class="relay">
-      <h3>Relay 1</h3>
-      <div id="led1" class="indicator"></div>
-      <button onclick="toggleRelay(1)">Toggle</button>
-    </div>
+      <canvas id="palettePreview" height="20"></canvas>
 
-    <div class="relay">
-      <h3>Relay 2</h3>
-      <div id="led2" class="indicator"></div>
-      <button onclick="toggleRelay(2)">Toggle</button>
-    </div>
+      Speed
+      <input type="range" min="0" max="255" id="speedSlider"
+        oninput="updateSegment('sx', this.value)">
 
-    <div class="relay">
-      <h3>Relay 3</h3>
-      <div id="led3" class="indicator"></div>
-      <button onclick="toggleRelay(3)">Toggle</button>
+      Intensity
+      <input type="range" min="0" max="255" id="intSlider"
+        oninput="updateSegment('ix', this.value)">
+
+      <div id="dynamicControls"></div>
     </div>
   </div>
 </div>
 
+<!-- RELAYS TAB -->
+<div id="relays" class="tab"></div>
+
+<!-- AUDIO TAB -->
+<div id="audio" class="tab">
+  <div class="section" id="audioSection"></div>
+</div>
+
+<!-- SYSTEM TAB -->
+<div id="system" class="tab">
+  <div class="section" id="systemInfo"></div>
+</div>
+
 <script>
-let ip = "";
-let relayStates = [0,0,0,0];
-let poller = null;
+let baseURL = "";
+let state = {};
+let cfg = {};
+let fxdata = [];
+let palx = {};
+let ws;
 
-window.onload = () => {
-  const savedIP = localStorage.getItem("wled_ip");
-  if (savedIP) {
-    document.getElementById("ip").value = savedIP;
-    ip = savedIP;
-    startPolling();
+function openTab(name){
+  document.querySelectorAll(".tab").forEach(t=>t.style.display="none");
+  document.querySelectorAll(".tab-buttons button").forEach(b=>b.classList.remove("active"));
+  document.getElementById(name).style.display="block";
+  event.target.classList.add("active");
+}
+
+function toggleSection(el){
+  el.nextElementSibling.classList.toggle("hidden");
+}
+
+async function connect(){
+  const ip = document.getElementById("ipInput").value;
+  const protocol = location.protocol === "https:" ? "https" : "http";
+  baseURL = `${protocol}://${ip}`;
+
+  try{
+    await loadAll();
+    startWebSocket();
+  }catch(e){
+    document.getElementById("status").innerText="Connection Failed";
   }
+}
 
-  document.getElementById("ip").addEventListener("change", e => {
-    ip = e.target.value.trim();
-    localStorage.setItem("wled_ip", ip);
-    startPolling();
+async function loadAll(){
+  state = await fetch(`${baseURL}/json/si`).then(r=>r.json());
+  const effects = await fetch(`${baseURL}/json/eff`).then(r=>r.json());
+  const palettes = await fetch(`${baseURL}/json/pal`).then(r=>r.json());
+  fxdata = await fetch(`${baseURL}/json/fxdata`).then(r=>r.json());
+  palx = await fetch(`${baseURL}/json/palx`).then(r=>r.json());
+  cfg = await fetch(`${baseURL}/json/cfg`).then(r=>r.json());
+
+  populateSelect("effectSelect", effects);
+  populateSelect("paletteSelect", palettes);
+
+  buildRelayPanel();
+  buildAudioPanel();
+  buildSystemInfo();
+  updateUI();
+}
+
+function populateSelect(id, arr){
+  const sel = document.getElementById(id);
+  sel.innerHTML="";
+  arr.forEach((name,i)=>{
+    const opt=document.createElement("option");
+    opt.value=i;
+    opt.textContent=name;
+    sel.appendChild(opt);
   });
-};
+}
 
-function setConnectionState(state) {
-  const bar = document.getElementById("connectionStatus");
-  const buttons = document.querySelectorAll("button");
+function updateUI(){
+  const seg = state.state.seg[0];
+  document.getElementById("briSlider").value = state.state.bri;
+  document.getElementById("effectSelect").value = seg.fx;
+  document.getElementById("paletteSelect").value = seg.pal;
+  document.getElementById("speedSlider").value = seg.sx;
+  document.getElementById("intSlider").value = seg.ix;
+  renderPalettePreview(seg.pal);
+  updateDynamicControls();
+}
 
-  bar.className = "status-bar " + state;
+function sendJSON(obj){
+  fetch(`${baseURL}/json`,{
+    method:"POST",
+    body:JSON.stringify(obj)
+  });
+}
 
-  if (state === "connected") {
-    bar.textContent = "Connected ✔️";
-    buttons.forEach(b => b.disabled = false);
-  } else if (state === "connecting") {
-    bar.textContent = "Connecting...";
-    buttons.forEach(b => b.disabled = true);
-  } else {
-    bar.textContent = "Disconnected ❌";
-    buttons.forEach(b => b.disabled = true);
+function togglePower(){
+  sendJSON({on: !state.state.on});
+}
+
+function updateBrightness(val){
+  sendJSON({bri: parseInt(val)});
+}
+
+function changeEffect(val){
+  sendJSON({seg:[{fx: parseInt(val)}]});
+}
+
+function changePalette(val){
+  renderPalettePreview(val);
+  sendJSON({seg:[{pal: parseInt(val)}]});
+}
+
+function updateSegment(key,val){
+  sendJSON({seg:[{[key]:parseInt(val)}]});
+}
+
+function renderPalettePreview(index){
+  if(!palx?.p[index]) return;
+
+  const canvas = document.getElementById("palettePreview");
+  const ctx = canvas.getContext("2d");
+  canvas.width = canvas.offsetWidth;
+
+  const gradient = ctx.createLinearGradient(0,0,canvas.width,0);
+
+  palx.p[index].forEach(stop=>{
+    const pos = stop[0]/255;
+    const color = `rgb(${stop[1]},${stop[2]},${stop[3]})`;
+    gradient.addColorStop(pos,color);
+  });
+
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0,0,canvas.width,20);
+}
+
+function updateDynamicControls(){
+  const seg = state.state.seg[0];
+  const definition = fxdata[seg.fx];
+  const container = document.getElementById("dynamicControls");
+  container.innerHTML="";
+  if(!definition) return;
+
+  const labels = definition.split(";")[0].split(",");
+
+  labels.forEach((label,i)=>{
+    if(label==="!" || label.trim()==="") return;
+
+    const slider=document.createElement("input");
+    slider.type="range";
+    slider.min=0;
+    slider.max=255;
+    slider.value = seg[`c${i+1}`] || 0;
+
+    slider.oninput = (e)=>{
+      sendJSON({seg:[{[`c${i+1}`]: parseInt(e.target.value)}]});
+    };
+
+    const wrapper=document.createElement("div");
+    wrapper.innerHTML=`${label}`;
+    wrapper.appendChild(slider);
+    container.appendChild(wrapper);
+  });
+}
+
+function buildRelayPanel(){
+  const container = document.getElementById("relays");
+  container.innerHTML="";
+  if(!cfg.um?.MultiRelay?.enabled){
+    container.innerHTML="No relays enabled.";
+    return;
+  }
+
+  state.state.MultiRelay.relays.forEach((r,i)=>{
+    const btn=document.createElement("button");
+    btn.className="relay-btn";
+    btn.innerText=`Relay ${i} ${r.state?'ON':'OFF'}`;
+    btn.style.background = r.state ? "#0a0" : "#333";
+    btn.onclick=()=>sendJSON({MultiRelay:{relay:i,on:!r.state}});
+    container.appendChild(btn);
+  });
+}
+
+function buildAudioPanel(){
+  const el=document.getElementById("audioSection");
+  if(cfg.um?.AudioReactive?.enabled){
+    el.innerHTML="Audio Reactive Enabled";
+  }else{
+    el.innerHTML="Audio Disabled";
   }
 }
 
-function startPolling() {
-  if (!ip) return;
-
-  if (poller) clearInterval(poller);
-
-  setConnectionState("connecting");
-  fetchState();
-  poller = setInterval(fetchState, 3000);
+function buildSystemInfo(){
+  const el=document.getElementById("systemInfo");
+  el.innerHTML=`
+    Name: ${state.info.name}<br>
+    IP: ${state.info.ip}<br>
+    LEDs: ${state.info.leds.count}<br>
+    WiFi Signal: ${state.info.wifi.signal}%<br>
+    Version: ${state.info.ver}
+  `;
 }
 
-async function fetchState() {
-  try {
-    const res = await fetch(`http://${ip}/json`);
-    const data = await res.json();
+function startWebSocket(){
+  const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${wsProtocol}://${document.getElementById("ipInput").value}/ws`);
 
-    const relays = data.state?.MultiRelay?.relays;
-    if (!relays) throw new Error();
+  ws.onopen = ()=>document.getElementById("status").innerText="Live Connected";
 
-    relays.forEach(r => {
-      relayStates[r.relay] = r.state ? 1 : 0;
-      const led = document.getElementById("led" + r.relay);
-      r.state ? led.classList.add("on") : led.classList.remove("on");
-    });
+  ws.onmessage = (event)=>{
+    const data = JSON.parse(event.data);
+    if(data.state){
+      state.state = data.state;
+      updateUI();
+      buildRelayPanel();
+    }
+  };
 
-    setConnectionState("connected");
-
-  } catch {
-    setConnectionState("disconnected");
-  }
-}
-
-async function toggleRelay(index) {
-  if (!ip) return;
-
-  relayStates[index] = relayStates[index] ? 0 : 1;
-
-  const switchString = relayStates.join(",");
-
-  try {
-    await fetch(`http://${ip}/relays?switch=${switchString}`);
-    setTimeout(fetchState, 300);
-  } catch {
-    setConnectionState("disconnected");
-  }
+  ws.onclose = ()=>document.getElementById("status").innerText="Disconnected";
 }
 </script>
 
